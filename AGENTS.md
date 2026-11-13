@@ -13,6 +13,9 @@ macOS-only full-screen kid-lock play mode (Swift / AppKit / SpriteKit).
 - Repo root: `~/KidPlay` (sibling of `pets` / `linkshot`, not inside the pets monorepo).
 - Unlock offer after **30 s** idle → Touch ID; each offer **fully resets** unlock state (cancel prior LAContext / hold / epoch) so exit cannot get stuck.
 - Alternate exit: small **⏏** control by the corner indicator — **hold 10 s**.
+- Ink / letter residue lifetime **15 s**, then fade off the field.
+- Combo HUD sits below the notch (`safeAreaInsets` + padding).
+- Auto-update from GitHub Releases on setup launch (`AppUpdater`, in-place binary swap).
 - Intercept media / brightness / volume (and similar) keys while locked when a swallowing `CGEventTap` is available.
 - Launch / install: `./scripts/run-app.sh` updates `~/Applications/KidPlay.app` **in place** (do not delete/recreate the bundle) for stable TCC.
 - Desktop alias: `~/Desktop/KidPlay` → `~/Applications/KidPlay.app`.
