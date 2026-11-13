@@ -26,6 +26,7 @@ final class SetupWindowController: NSWindowController {
         super.init(window: window)
         buildUI()
         refreshAccessibilityStatus()
+        scheduleUpdateCheck()
     }
 
     @available(*, unavailable)
@@ -40,6 +41,30 @@ final class SetupWindowController: NSWindowController {
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         startButton.isEnabled = true
+    }
+
+    func setStatus(_ message: String, emphasis: Bool = false) {
+        statusLabel.stringValue = message
+        statusLabel.textColor = emphasis ? .secondaryLabelColor : .secondaryLabelColor
+    }
+
+    private func scheduleUpdateCheck() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let outcome = await AppUpdater.checkAndInstallIfNeeded { [weak self] text in
+                self?.setStatus(text, emphasis: true)
+            }
+            switch outcome {
+            case .upToDate, .skipped:
+                self.refreshAccessibilityStatus()
+            case .updated(let version):
+                self.setStatus("Обновлено до \(version). Перезапуск…", emphasis: true)
+            case .failed(let message):
+                // Don't block Start — just show the note.
+                self.statusLabel.stringValue = message
+                self.statusLabel.textColor = .systemOrange
+            }
+        }
     }
 
     private func buildUI() {

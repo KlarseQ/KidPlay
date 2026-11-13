@@ -62,7 +62,8 @@ final class PlayWindowController: NSWindowController {
             comboHUD.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             comboHUD.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             comboHUD.topAnchor.constraint(equalTo: content.topAnchor),
-            comboHUD.heightAnchor.constraint(equalToConstant: 96),
+            // Tall enough for notch clearance + two combo lines.
+            comboHUD.heightAnchor.constraint(equalToConstant: 140),
         ])
 
         scene.size = frame.size

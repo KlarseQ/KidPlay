@@ -3,12 +3,15 @@ import SpriteKit
 
 @MainActor
 final class InkFlowScene: SKScene {
+    /// How long ink stains and letter residue stay on the field.
+    static let residueLifetime: TimeInterval = 15
+
     private var lastInkPoint: CGPoint?
     private let residueNode = SKNode()
     private let liveNode = SKNode()
     private var residueCount = 0
     private let maxResidue = 2500
-    /// Permanent stain opacity — faint but visible; stacks as you draw.
+    /// Temporary stain opacity — faint film that fades out with lifetime.
     private let residueAlpha: CGFloat = 0.09
 
     override func didMove(to view: SKView) {
@@ -33,7 +36,7 @@ final class InkFlowScene: SKScene {
             alpha: CGFloat.random(in: 0.45...0.8)
         )
         liveNode.addChild(blot)
-        stampPermanentResidue(like: blot)
+        stampResidue(like: blot)
         animateEphemeral(blot, duration: CGFloat.random(in: 0.9...1.5))
     }
 
@@ -56,7 +59,7 @@ final class InkFlowScene: SKScene {
             alpha: CGFloat.random(in: 0.4...0.75)
         )
         liveNode.addChild(under)
-        stampPermanentResidue(like: under)
+        stampResidue(like: under)
         animateEphemeral(under, duration: 1.3)
 
         let label = SKLabelNode(text: text)
@@ -71,7 +74,6 @@ final class InkFlowScene: SKScene {
         label.zRotation = isNamed ? CGFloat.random(in: -0.12...0.12) : CGFloat.random(in: -0.35...0.35)
         liveNode.addChild(label)
 
-        // Permanent faint letter/name stain.
         if let stain = label.copy() as? SKLabelNode {
             stain.removeAllActions()
             stain.setScale(1)
@@ -86,7 +88,7 @@ final class InkFlowScene: SKScene {
             alpha: 0.5
         )
         liveNode.addChild(drip)
-        stampPermanentResidue(like: drip)
+        stampResidue(like: drip)
         animateEphemeral(drip, duration: 1.4)
 
         let drift = CGVector(
@@ -107,7 +109,6 @@ final class InkFlowScene: SKScene {
     }
 
     func spawnLabeled(_ text: String) {
-        // Media / brightness / etc. — named label at a random keyboard-ish slot.
         let point = CGPoint(
             x: size.width * CGFloat.random(in: 0.15...0.85),
             y: size.height * CGFloat.random(in: 0.12...0.45)
@@ -116,7 +117,7 @@ final class InkFlowScene: SKScene {
 
         let under = makeInkStain(at: point, baseRadius: fontSize * 0.6, alpha: 0.55)
         liveNode.addChild(under)
-        stampPermanentResidue(like: under)
+        stampResidue(like: under)
         animateEphemeral(under, duration: 1.2)
 
         let label = SKLabelNode(text: text)
@@ -184,7 +185,6 @@ final class InkFlowScene: SKScene {
         container.position = point
         container.zRotation = CGFloat.random(in: 0...(2 * .pi))
 
-        // Dark wet core — irregular blot.
         let core = SKShapeNode(path: blotPath(radius: baseRadius, jagged: 0.55))
         core.fillColor = inkColor(alpha: alpha)
         core.strokeColor = .clear
@@ -192,7 +192,6 @@ final class InkFlowScene: SKScene {
         core.lineWidth = 0
         container.addChild(core)
 
-        // Soft soak around the core (larger, lighter).
         let soak = SKShapeNode(path: blotPath(radius: baseRadius * 1.55, jagged: 0.4))
         soak.fillColor = inkColor(alpha: alpha * 0.28)
         soak.strokeColor = .clear
@@ -200,7 +199,6 @@ final class InkFlowScene: SKScene {
         soak.zPosition = -1
         container.addChild(soak)
 
-        // Feather fringe.
         let fringe = SKShapeNode(path: blotPath(radius: baseRadius * 2.1, jagged: 0.7))
         fringe.fillColor = inkColor(alpha: alpha * 0.1)
         fringe.strokeColor = .clear
@@ -208,7 +206,6 @@ final class InkFlowScene: SKScene {
         fringe.zPosition = -2
         container.addChild(fringe)
 
-        // Drip / run-down for wet feel.
         if Bool.random() {
             let dripH = baseRadius * CGFloat.random(in: 0.6...1.8)
             let drip = SKShapeNode(path: dripPath(width: baseRadius * 0.18, height: dripH))
@@ -219,7 +216,6 @@ final class InkFlowScene: SKScene {
             container.addChild(drip)
         }
 
-        // Satellite spatters.
         for _ in 0..<Int.random(in: 2...6) {
             let a = CGFloat.random(in: 0...(2 * .pi))
             let d = baseRadius * CGFloat.random(in: 0.85...2.0)
@@ -268,7 +264,6 @@ final class InkFlowScene: SKScene {
     }
 
     private func inkColor(alpha: CGFloat) -> SKColor {
-        // Carbon ink: almost black with a hint of indigo.
         SKColor(
             calibratedRed: CGFloat.random(in: 0.01...0.07),
             green: CGFloat.random(in: 0.02...0.08),
@@ -287,11 +282,10 @@ final class InkFlowScene: SKScene {
         ]))
     }
 
-    private func stampPermanentResidue(like node: SKNode) {
+    private func stampResidue(like node: SKNode) {
         guard let stain = node.copy() as? SKNode else { return }
         stain.removeAllActions()
         stain.setScale(1)
-        // Flatten to residue brightness: visible permanent ink film.
         stain.alpha = residueAlpha
         addResidue(stain)
     }
@@ -304,5 +298,19 @@ final class InkFlowScene: SKScene {
         node.zPosition = CGFloat(residueCount)
         residueNode.addChild(node)
         residueCount += 1
+
+        let life = Self.residueLifetime
+        let fade = min(2.5, life * 0.2)
+        node.run(.sequence([
+            .wait(forDuration: life - fade),
+            .fadeOut(withDuration: fade),
+            .run { [weak self, weak node] in
+                MainActor.assumeIsolated {
+                    guard let self, let node, node.parent != nil else { return }
+                    node.removeFromParent()
+                    self.residueCount = max(0, self.residueCount - 1)
+                }
+            },
+        ]))
     }
 }

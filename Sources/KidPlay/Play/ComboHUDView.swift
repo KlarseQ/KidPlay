@@ -1,10 +1,13 @@
 import AppKit
 
 /// Kid-facing combo readout: key streak + trackpad path.
+/// Sits below the MacBook notch / camera housing.
 @MainActor
 final class ComboHUDView: NSView {
     private let keyLabel = NSTextField(labelWithString: "")
     private let pathLabel = NSTextField(labelWithString: "")
+    private let stack = NSStackView()
+    private var topConstraint: NSLayoutConstraint?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -14,16 +17,18 @@ final class ComboHUDView: NSView {
         configure(keyLabel, size: 28, weight: .semibold)
         configure(pathLabel, size: 16, weight: .medium)
 
-        let stack = NSStackView(views: [keyLabel, pathLabel])
+        stack.setViews([keyLabel, pathLabel], in: .center)
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 2
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
+        let top = stack.topAnchor.constraint(equalTo: topAnchor, constant: Self.defaultTopInset)
+        topConstraint = top
         NSLayoutConstraint.activate([
             stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 28),
+            top,
         ])
 
         update(keys: 0, path: 0)
@@ -32,6 +37,29 @@ final class ComboHUDView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    /// Notch / camera housing clearance (fullscreen borderless ignores menu bar safe area alone).
+    private static let defaultTopInset: CGFloat = 56
+    private static let minTopInset: CGFloat = 48
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        refreshTopInset()
+    }
+
+    override func layout() {
+        super.layout()
+        refreshTopInset()
+    }
+
+    private func refreshTopInset() {
+        let safeTop = window?.screen?.safeAreaInsets.top ?? 0
+        // Below notch: safe area + padding, floored so non-notch Macs still look balanced.
+        let inset = max(Self.minTopInset, safeTop + 20)
+        if topConstraint?.constant != inset {
+            topConstraint?.constant = inset
+        }
     }
 
     func update(keys: Int, path: Int) {
