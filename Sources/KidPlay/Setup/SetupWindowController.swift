@@ -9,12 +9,13 @@ final class SetupWindowController: NSWindowController {
     private let pathLabel = NSTextField(wrappingLabelWithString: "")
     private let startButton = NSButton(title: "Старт", target: nil, action: nil)
     private let accessibilityButton = NSButton(title: "Разрешения…", target: nil, action: nil)
+    private let donateButton = NSButton(title: "Поддержать @klarseq", target: nil, action: nil)
 
     init(onStart: @escaping () -> Void) {
         self.onStart = onStart
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 280),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 320),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -100,6 +101,13 @@ final class SetupWindowController: NSWindowController {
         accessibilityButton.target = self
         accessibilityButton.action = #selector(openAccessibilitySettings)
 
+        donateButton.bezelStyle = .inline
+        donateButton.isBordered = false
+        donateButton.contentTintColor = .linkColor
+        donateButton.font = .systemFont(ofSize: 12)
+        donateButton.target = self
+        donateButton.action = #selector(openDonate)
+
         let stack = NSStackView(views: [
             title,
             subtitle,
@@ -107,6 +115,7 @@ final class SetupWindowController: NSWindowController {
             pathLabel,
             startButton,
             accessibilityButton,
+            donateButton,
         ])
         stack.orientation = .vertical
         stack.alignment = .width
@@ -144,6 +153,12 @@ final class SetupWindowController: NSWindowController {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.refreshAccessibilityStatus()
+        }
+    }
+
+    @objc private func openDonate() {
+        if let url = URL(string: "https://t.me/klarseq") {
+            NSWorkspace.shared.open(url)
         }
     }
 
