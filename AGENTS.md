@@ -21,7 +21,7 @@ macOS-only full-screen kid-lock play mode (Swift / AppKit / SpriteKit).
 - Letter keys show their own glyph with RU/EN ± case variants; modifiers show names; digits shown; spawn near keyboard-layout position ± radius (not at the cursor).
 - Combo HUD sits below the notch (`safeAreaInsets` + padding).
 - Auto-update from GitHub Releases on setup launch (`AppUpdater`, in-place binary swap).
-- While locked, swallow media / brightness / volume (and similar) keys so background apps (e.g. browser video) cannot receive them when a swallowing `CGEventTap` is available.
+- While locked, swallow media / brightness / volume (and similar) keys so background apps (e.g. browser video) cannot receive them. Start **hard-fails** unless a swallowing `CGEventTap` installs (no listen-only fallback).
 - Launch / install: `./scripts/run-app.sh` updates `~/Applications/KidPlay.app` **in place** (do not delete/recreate the bundle) for stable TCC.
 - Desktop alias: `~/Desktop/KidPlay` → `~/Applications/KidPlay.app`.
 - Open-source: PRs welcome, only owner merges; donate via Telegram `@klarseq`.

@@ -14,8 +14,8 @@ final class AppCoordinator {
         playController = nil
 
         if setupController == nil {
-            let setup = SetupWindowController { [weak self] in
-                self?.beginPlay()
+            let setup = SetupWindowController { [weak self] useColors in
+                self?.beginPlay(useColors: useColors)
             }
             setupController = setup
         }
@@ -27,10 +27,10 @@ final class AppCoordinator {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func beginPlay() {
+    private func beginPlay(useColors: Bool) {
         setupController?.window?.orderOut(nil)
 
-        let play = PlaySessionController { [weak self] outcome in
+        let play = PlaySessionController(useColors: useColors) { [weak self] outcome in
             switch outcome {
             case .exited:
                 self?.quitApp()

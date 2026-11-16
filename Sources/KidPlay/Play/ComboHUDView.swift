@@ -8,19 +8,23 @@ final class ComboHUDView: NSView {
     private let pathLabel = NSTextField(labelWithString: "")
     private let stack = NSStackView()
     private var topConstraint: NSLayoutConstraint?
+    private var useColors = false
+    private var lastKeys = 0
+    private var lastPath = 0
+    private var glowLayer: CAGradientLayer?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
 
-        configure(keyLabel, size: 28, weight: .semibold)
-        configure(pathLabel, size: 16, weight: .medium)
+        configure(keyLabel, size: 30, weight: .heavy)
+        configure(pathLabel, size: 17, weight: .semibold)
 
         stack.setViews([keyLabel, pathLabel], in: .center)
         stack.orientation = .vertical
         stack.alignment = .centerX
-        stack.spacing = 2
+        stack.spacing = 4
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
@@ -43,6 +47,11 @@ final class ComboHUDView: NSView {
     private static let defaultTopInset: CGFloat = 56
     private static let minTopInset: CGFloat = 48
 
+    func setUseColors(_ enabled: Bool) {
+        useColors = enabled
+        update(keys: lastKeys, path: lastPath)
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         refreshTopInset()
@@ -51,6 +60,7 @@ final class ComboHUDView: NSView {
     override func layout() {
         super.layout()
         refreshTopInset()
+        glowLayer?.frame = bounds
     }
 
     private func refreshTopInset() {
@@ -63,21 +73,60 @@ final class ComboHUDView: NSView {
     }
 
     func update(keys: Int, path: Int) {
+        lastKeys = keys
+        lastPath = path
         if keys > 0 {
             keyLabel.stringValue = "КОМБО ×\(keys)"
-            keyLabel.alphaValue = min(1, 0.35 + CGFloat(keys) * 0.04)
+            keyLabel.alphaValue = 1
+            if useColors {
+                let color = PlayPalette.streakNSColor(level: keys)
+                keyLabel.textColor = color
+                keyLabel.font = .systemFont(ofSize: min(42, 28 + CGFloat(keys)), weight: .heavy)
+                applyGlow(color: color, intensity: min(1, 0.25 + CGFloat(keys) * 0.04))
+            } else {
+                keyLabel.textColor = NSColor.white.withAlphaComponent(min(1, 0.45 + CGFloat(keys) * 0.05))
+                keyLabel.font = .systemFont(ofSize: 30, weight: .heavy)
+                clearGlow()
+            }
         } else {
             keyLabel.stringValue = ""
             keyLabel.alphaValue = 0
+            clearGlow()
         }
 
         if path > 0 {
             pathLabel.stringValue = "путь \(path)"
-            pathLabel.alphaValue = min(0.85, 0.25 + CGFloat(path) * 0.01)
+            pathLabel.alphaValue = 1
+            if useColors {
+                let color = PlayPalette.streakNSColor(level: max(1, path / 8 + 1))
+                pathLabel.textColor = color.withAlphaComponent(0.95)
+            } else {
+                pathLabel.textColor = NSColor.white.withAlphaComponent(min(0.85, 0.3 + CGFloat(path) * 0.01))
+            }
         } else {
             pathLabel.stringValue = ""
             pathLabel.alphaValue = 0
         }
+    }
+
+    private func applyGlow(color: NSColor, intensity: CGFloat) {
+        wantsLayer = true
+        if glowLayer == nil {
+            let g = CAGradientLayer()
+            g.startPoint = CGPoint(x: 0.5, y: 0)
+            g.endPoint = CGPoint(x: 0.5, y: 1)
+            layer?.insertSublayer(g, at: 0)
+            glowLayer = g
+        }
+        let clear = NSColor.clear.cgColor
+        let tint = color.withAlphaComponent(intensity * 0.35).cgColor
+        glowLayer?.colors = [tint, clear]
+        glowLayer?.frame = bounds
+    }
+
+    private func clearGlow() {
+        glowLayer?.removeFromSuperlayer()
+        glowLayer = nil
     }
 
     private func configure(_ label: NSTextField, size: CGFloat, weight: NSFont.Weight) {

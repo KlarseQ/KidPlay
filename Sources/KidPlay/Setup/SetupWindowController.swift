@@ -3,19 +3,22 @@ import ApplicationServices
 
 @MainActor
 final class SetupWindowController: NSWindowController {
-    private let onStart: () -> Void
+    private let onStart: (_ useColors: Bool) -> Void
 
     private let statusLabel = NSTextField(labelWithString: "")
     private let pathLabel = NSTextField(wrappingLabelWithString: "")
+    private let colorsCheckbox = NSButton(checkboxWithTitle: "Использовать цвета", target: nil, action: nil)
     private let startButton = NSButton(title: "Старт", target: nil, action: nil)
     private let accessibilityButton = NSButton(title: "Разрешения…", target: nil, action: nil)
     private let donateButton = NSButton(title: "Поддержать @klarseq", target: nil, action: nil)
 
-    init(onStart: @escaping () -> Void) {
+    var useColors: Bool { colorsCheckbox.state == .on }
+
+    init(onStart: @escaping (_ useColors: Bool) -> Void) {
         self.onStart = onStart
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 360),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -90,6 +93,10 @@ final class SetupWindowController: NSWindowController {
         pathLabel.alignment = .center
         pathLabel.stringValue = "Приложение: \(Self.executablePath)"
 
+        colorsCheckbox.state = .on
+        colorsCheckbox.font = .systemFont(ofSize: 13)
+        colorsCheckbox.setButtonType(.switch)
+
         startButton.bezelStyle = .rounded
         startButton.setButtonType(.momentaryPushIn)
         startButton.isEnabled = true
@@ -113,6 +120,7 @@ final class SetupWindowController: NSWindowController {
             subtitle,
             statusLabel,
             pathLabel,
+            colorsCheckbox,
             startButton,
             accessibilityButton,
             donateButton,
@@ -172,6 +180,6 @@ final class SetupWindowController: NSWindowController {
         refreshAccessibilityStatus()
         statusLabel.stringValue = "Запуск…"
         statusLabel.textColor = .secondaryLabelColor
-        onStart()
+        onStart(useColors)
     }
 }

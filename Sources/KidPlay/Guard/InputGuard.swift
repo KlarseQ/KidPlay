@@ -58,9 +58,13 @@ final class InputGuard: @unchecked Sendable {
             return guardRef.handle(type: type, event: event)
         }
 
-        // Prefer swallowing taps. Do not gate on Preflight* — they often lie until after a
-        // successful tap / process restart, and Request* would pop dialogs again.
-        let locations: [CGEventTapLocation] = [.cghidEventTap, .cgSessionEventTap]
+        // Prefer HID tap first — media/brightness/volume often only die there.
+        // Do not gate on Preflight* — they often lie until after a successful tap.
+        let locations: [CGEventTapLocation] = [
+            .cghidEventTap,
+            .cgSessionEventTap,
+            .cgAnnotatedSessionEventTap,
+        ]
         for location in locations {
             if let tap = CGEvent.tapCreate(
                 tap: location,
@@ -79,34 +83,11 @@ final class InputGuard: @unchecked Sendable {
             }
         }
 
-        if taps.isEmpty {
-            // Last resort: observe-only so Play still works; media keys may leak.
-            for location in locations {
-                if let tap = CGEvent.tapCreate(
-                    tap: location,
-                    place: .headInsertEventTap,
-                    options: .listenOnly,
-                    eventsOfInterest: mask,
-                    callback: callback,
-                    userInfo: userInfo
-                ) {
-                    taps.append(tap)
-                    if let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) {
-                        runLoopSources.append(source)
-                        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-                    }
-                    CGEvent.tapEnable(tap: tap, enable: true)
-                }
-            }
-            if !taps.isEmpty {
-                isSwallowing = false
-                NSLog("KidPlay: listenOnly tap(s) only. \(Self.permissionSummary())")
-                return
-            }
-
+        guard !taps.isEmpty else {
+            // No listenOnly fallback — kid-lock must fully swallow or not start.
             throw InputGuardError.tapCreateFailed(
                 """
-                Не удалось создать CGEventTap.
+                Не удалось создать глотающий CGEventTap — Play заблокирован.
                 \(Self.permissionSummary())
                 Если галочки уже стоят: сними и поставь снова для KidPlay в
                 Универсальный доступ и Мониторинг ввода, полностью закрой приложение и запусти через ./scripts/run-app.sh.
@@ -132,6 +113,8 @@ final class InputGuard: @unchecked Sendable {
     }
 
     private static var eventMask: CGEventMask {
+        // 14 = NSEvent.EventType.systemDefined (NX media / brightness / volume).
+        // 13 = appKitDefined — swallow out of caution for stray control events.
         let bits: [UInt64] = [
             UInt64(CGEventType.keyDown.rawValue),
             UInt64(CGEventType.keyUp.rawValue),
@@ -147,6 +130,7 @@ final class InputGuard: @unchecked Sendable {
             UInt64(CGEventType.rightMouseDragged.rawValue),
             UInt64(CGEventType.otherMouseDragged.rawValue),
             UInt64(CGEventType.scrollWheel.rawValue),
+            13,
             14,
             29,
         ]
@@ -158,17 +142,19 @@ final class InputGuard: @unchecked Sendable {
             for tap in taps {
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
-            return Unmanaged.passUnretained(event)
+            // Do not forward the disable sentinel.
+            return nil
         }
 
         let emit = onEvent
         let raw = Int(type.rawValue)
 
-        if raw == 14 {
-            if let label = Self.mediaLabel(from: event) {
+        // System-defined NX aux keys (volume / brightness / play / backlight…).
+        if raw == 14 || raw == 13 || raw == 29 {
+            if raw == 14, let label = Self.mediaLabel(from: event) {
                 emit?(.labeled(label))
             }
-            return isSwallowing ? nil : Unmanaged.passUnretained(event)
+            return nil
         }
 
         switch type {
@@ -207,7 +193,8 @@ final class InputGuard: @unchecked Sendable {
             break
         }
 
-        return isSwallowing ? nil : Unmanaged.passUnretained(event)
+        // Always swallow while taps are installed — start() only installs swallowing taps.
+        return nil
     }
 
     private func emitPointerIfNeeded(_ loc: CGPoint, isDrag: Bool) {
@@ -225,10 +212,17 @@ final class InputGuard: @unchecked Sendable {
 
     private static func mediaLabel(from event: CGEvent) -> String? {
         guard let ns = NSEvent(cgEvent: event) else { return "media" }
+        // NX_SUBTYPE_AUX_CONTROL_BUTTONS == 8
+        if ns.subtype.rawValue != 8 {
+            return "media"
+        }
         let data1 = ns.data1
         let keyType = (data1 & 0xFFFF_0000) >> 16
+        let keyFlags = (data1 & 0x0000_FF00) >> 8
+        let isRepeat = (keyFlags & 0x1) != 0
         let keyState = data1 & 0x0000_00FF
-        if keyState == 0x0B { return nil }
+        // 0x0A = keyDown, 0x0B = keyUp — ignore up / repeats for visuals.
+        if keyState == 0x0B || isRepeat { return nil }
 
         switch keyType {
         case 0: return "звук +"

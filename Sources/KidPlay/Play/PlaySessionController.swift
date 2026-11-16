@@ -9,6 +9,7 @@ enum PlaySessionOutcome {
 @MainActor
 final class PlaySessionController {
     private let onFinish: (PlaySessionOutcome) -> Void
+    private let useColors: Bool
 
     private let inputGuard = InputGuard()
     private let idleGate = IdleGate()
@@ -21,7 +22,9 @@ final class PlaySessionController {
     private var lastScreenPoint: CGPoint?
     private var savedPresentationOptions: NSApplication.PresentationOptions = []
     private var localKeyMonitor: Any?
+    private var localSystemMonitor: Any?
     private var globalKeyMonitor: Any?
+    private var cursorHideTimer: Timer?
 
     private var pendingPointer: CGPoint?
     private var pointerFlushScheduled = false
@@ -35,12 +38,14 @@ final class PlaySessionController {
     private var holdStartedAt: CFAbsoluteTime?
     private var holdTimer: Timer?
 
-    init(onFinish: @escaping (PlaySessionOutcome) -> Void) {
+    init(useColors: Bool, onFinish: @escaping (PlaySessionOutcome) -> Void) {
+        self.useColors = useColors
         self.onFinish = onFinish
     }
 
     func start() {
-        NSCursor.hide()
+        hideCursor()
+        startCursorHideTimer()
         applyKioskPresentation()
         presentKioskWindows()
         installKeyMonitors()
@@ -94,9 +99,13 @@ final class PlaySessionController {
     func tearDown() {
         clearUnlockState(restartTap: false)
         if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }
+        if let localSystemMonitor { NSEvent.removeMonitor(localSystemMonitor) }
         if let globalKeyMonitor { NSEvent.removeMonitor(globalKeyMonitor) }
         localKeyMonitor = nil
+        localSystemMonitor = nil
         globalKeyMonitor = nil
+        cursorHideTimer?.invalidate()
+        cursorHideTimer = nil
 
         idleGate.stop()
         inputGuard.stop()
@@ -120,9 +129,16 @@ final class PlaySessionController {
     }
 
     private func installKeyMonitors() {
-        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleKey(keyCode: Int64(event.keyCode), characters: event.charactersIgnoringModifiers)
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [weak self] event in
+            if event.type == .keyDown {
+                self?.handleKey(keyCode: Int64(event.keyCode), characters: event.charactersIgnoringModifiers)
+            }
             return nil
+        }
+
+        // Extra local swallow for NX system-defined (volume / brightness) if they reach the app.
+        localSystemMonitor = NSEvent.addLocalMonitorForEvents(matching: .systemDefined) { _ in
+            nil
         }
 
         globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -136,6 +152,23 @@ final class PlaySessionController {
                 self?.handleKey(keyCode: Int64(code), characters: chars)
             }
         }
+    }
+
+    private func hideCursor() {
+        NSCursor.hide()
+        NSCursor.setHiddenUntilMouseMoves(false)
+    }
+
+    private func startCursorHideTimer() {
+        cursorHideTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.4, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isExiting else { return }
+                self.hideCursor()
+            }
+        }
+        cursorHideTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func applyKioskPresentation() {
@@ -159,6 +192,8 @@ final class PlaySessionController {
     private func presentKioskWindows() {
         for screen in NSScreen.screens {
             let controller = PlayWindowController(screen: screen)
+            controller.scene.useColors = useColors
+            controller.comboHUD.setUseColors(useColors)
             controller.makeKeyAndOrderFront()
             windows.append(controller)
             if screen == NSScreen.main || primaryWindow == nil {
@@ -333,6 +368,7 @@ final class PlaySessionController {
     }
 
     private func notePlayActivity() {
+        hideCursor()
         idleGate.noteActivity()
         // Activity cancels an in-flight unlock offer cleanly.
         if !idleGate.isArmed {
@@ -364,7 +400,9 @@ final class PlaySessionController {
     private func promptTouchID(epoch: UInt64) async {
         guard !isExiting, unlockEpoch == epoch, idleGate.isArmed else { return }
 
-        inputGuard.stop()
+        // Keep swallowing taps during Touch ID so media/volume keys cannot leak to
+        // background apps (Touch ID itself uses the sensor, not keyboard events).
+        ensureTapRunning()
         let ok = await touchID.authenticate(reason: "Выйти из KidPlay")
         guard unlockEpoch == epoch, !Task.isCancelled else {
             // Stale cycle — another cleanup already took over.

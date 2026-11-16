@@ -6,6 +6,9 @@ final class InkFlowScene: SKScene {
     /// How long ink stains and letter residue stay on the field.
     static let residueLifetime: TimeInterval = 15
 
+    /// When true — vivid multicolor symbols + ink (Setup «использовать цвета»).
+    var useColors = false
+
     private var lastInkPoint: CGPoint?
     private let residueNode = SKNode()
     private let liveNode = SKNode()
@@ -65,7 +68,9 @@ final class InkFlowScene: SKScene {
         let label = SKLabelNode(text: text)
         label.fontName = Self.randomFontName()
         label.fontSize = fontSize
-        label.fontColor = SKColor(calibratedWhite: CGFloat.random(in: 0.88...1.0), alpha: 0.95)
+        label.fontColor = useColors
+            ? PlayPalette.randomSymbolSKColor()
+            : SKColor(calibratedWhite: CGFloat.random(in: 0.88...1.0), alpha: 0.95)
         label.verticalAlignmentMode = .center
         label.horizontalAlignmentMode = .center
         label.zPosition = 5
@@ -123,7 +128,9 @@ final class InkFlowScene: SKScene {
         let label = SKLabelNode(text: text)
         label.fontName = Self.randomFontName()
         label.fontSize = fontSize
-        label.fontColor = SKColor(calibratedWhite: 0.95, alpha: 0.95)
+        label.fontColor = useColors
+            ? PlayPalette.randomSymbolSKColor()
+            : SKColor(calibratedWhite: 0.95, alpha: 0.95)
         label.verticalAlignmentMode = .center
         label.horizontalAlignmentMode = .center
         label.position = point
@@ -264,7 +271,10 @@ final class InkFlowScene: SKScene {
     }
 
     private func inkColor(alpha: CGFloat) -> SKColor {
-        SKColor(
+        if useColors {
+            return PlayPalette.randomInkSKColor(alpha: alpha)
+        }
+        return SKColor(
             calibratedRed: CGFloat.random(in: 0.01...0.07),
             green: CGFloat.random(in: 0.02...0.08),
             blue: CGFloat.random(in: 0.06...0.16),
