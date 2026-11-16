@@ -58,11 +58,16 @@ xattr -cr "$STAGE/$APP_NAME" 2>/dev/null || true
   ditto -c -k --keepParent "$APP_NAME" "$DIST/$ZIP_NAME"
 )
 
-# Also refresh local Applications install
+# Refresh local Applications install IN PLACE (binary + plist only).
+# Do not ditto/replace the whole .app or force re-sign — that drops TCC grants.
 APP_DIR="${HOME}/Applications"
-mkdir -p "$APP_DIR"
-ditto "$STAGE/$APP_NAME" "$APP_DIR/$APP_NAME"
-codesign --force --deep --sign - --identifier "xyz.klarseq.KidPlay" "$APP_DIR/$APP_NAME" 2>/dev/null || true
+APP="${APP_DIR}/KidPlay.app"
+mkdir -p "$APP/Contents/MacOS"
+cp "$MACOS/KidPlay" "$APP/Contents/MacOS/KidPlay"
+chmod +x "$APP/Contents/MacOS/KidPlay"
+cp "$CONTENTS/Info.plist" "$APP/Contents/Info.plist"
+xattr -cr "$APP" 2>/dev/null || true
 
 echo "Release zip: $DIST/$ZIP_NAME"
+echo "Local install (in-place): $APP"
 ls -lh "$DIST/$ZIP_NAME"

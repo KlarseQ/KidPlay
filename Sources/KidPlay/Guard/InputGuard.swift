@@ -87,11 +87,12 @@ final class InputGuard: @unchecked Sendable {
             // No listenOnly fallback — kid-lock must fully swallow or not start.
             throw InputGuardError.tapCreateFailed(
                 """
-                Не удалось создать глотающий CGEventTap — Play заблокирован.
+                Нет глотающего CGEventTap — Play заблокирован.
                 \(Self.permissionSummary())
-                Если галочки уже стоят: сними и поставь снова для KidPlay в
-                Универсальный доступ и Мониторинг ввода, полностью закрой приложение и запусти через ./scripts/run-app.sh.
-                Не нажимай «Разрешения…» каждый раз — только если галочек ещё нет.
+                1) Универсальный доступ + Мониторинг ввода → включи именно \(Bundle.main.bundleURL.path)
+                2) Если галочка есть, но статус «нет»: сними → поставь снова
+                3) Cmd+Q (полностью закрой) и открой KidPlay снова с Desktop
+                «Разрешения…» — только чтобы открыть настройки, не каждый запуск.
                 """
             )
         }

@@ -185,16 +185,10 @@ enum AppUpdater {
             try fm.copyItem(at: newPlist, to: destPlist)
         }
 
-        let sign = Process()
-        sign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        sign.arguments = [
-            "--force", "--deep", "--sign", "-",
-            "--identifier", "xyz.klarseq.KidPlay",
-            appURL.path,
-        ]
-        try? sign.run()
-        sign.waitUntilExit()
-
+        // Do NOT force re-sign the whole bundle on update — ad-hoc --force
+        // changes CDHash and macOS drops Accessibility / Input Monitoring grants.
+        // In-place binary+plist swap keeps the existing code signature identity
+        // enough for TCC when the path stays ~/Applications/KidPlay.app.
         let xattr = Process()
         xattr.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
         xattr.arguments = ["-dr", "com.apple.quarantine", appURL.path]

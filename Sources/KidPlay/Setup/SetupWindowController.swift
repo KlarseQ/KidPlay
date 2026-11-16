@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreGraphics
 
 @MainActor
 final class SetupWindowController: NSWindowController {
@@ -31,11 +32,21 @@ final class SetupWindowController: NSWindowController {
         buildUI()
         refreshAccessibilityStatus()
         scheduleUpdateCheck()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     func showError(_ message: String) {
@@ -141,9 +152,20 @@ final class SetupWindowController: NSWindowController {
 
     private func refreshAccessibilityStatus() {
         let summary = InputGuard.permissionSummary()
-        statusLabel.stringValue = "Статус: \(summary). Запрос прав — только «Разрешения…»."
-        statusLabel.textColor = .secondaryLabelColor
+        let trusted = AXIsProcessTrusted()
+        let listen = CGPreflightListenEventAccess()
         pathLabel.stringValue = "Приложение: \(Self.executablePath)"
+
+        if trusted || listen {
+            statusLabel.stringValue = "Статус: \(summary). Можно жать Старт."
+            statusLabel.textColor = .secondaryLabelColor
+        } else {
+            statusLabel.stringValue = """
+            Статус: \(summary).
+            Включи KidPlay в «Универсальный доступ» и «Мониторинг ввода», затем Cmd+Q и открой снова.
+            """
+            statusLabel.textColor = .systemOrange
+        }
     }
 
     private static var executablePath: String {
@@ -152,15 +174,27 @@ final class SetupWindowController: NSWindowController {
             ?? "(unknown)"
     }
 
+    @objc private func appDidBecomeActive() {
+        // After returning from System Settings, re-read TCC without prompting.
+        refreshAccessibilityStatus()
+    }
+
     @objc private func openAccessibilitySettings() {
         InputGuard.promptForPermissions()
-        if let url = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility") {
-            NSWorkspace.shared.open(url)
-        } else if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-            NSWorkspace.shared.open(url)
+        let urls = [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ListenEvent",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+        ]
+        for s in urls {
+            if let url = URL(string: s) {
+                NSWorkspace.shared.open(url)
+            }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.refreshAccessibilityStatus()
+        for delay in [0.5, 1.5, 3.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.refreshAccessibilityStatus()
+            }
         }
     }
 

@@ -35,9 +35,9 @@ if [[ ! -f "$CONTENTS/Info.plist" ]]; then
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.2.0</string>
+  <string>1.2.1</string>
   <key>CFBundleVersion</key>
-  <string>1.2.0</string>
+  <string>1.2.1</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>
@@ -49,9 +49,13 @@ if [[ ! -f "$CONTENTS/Info.plist" ]]; then
 PLIST
 fi
 
-# Re-sign in place with stable bundle identifier.
-codesign --force --deep --sign - --identifier "xyz.klarseq.KidPlay" "$APP" 2>/dev/null || true
+# Skip force re-sign — ad-hoc --force changes CDHash and drops TCC grants.
+# First-time installs may need a one-shot: codesign -s - --identifier xyz.klarseq.KidPlay "$APP"
 xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+
+# Keep Info.plist version in sync when the file already existed.
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.2.1" "$CONTENTS/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.2.1" "$CONTENTS/Info.plist" 2>/dev/null || true
 
 echo "Updated $APP"
 echo "Launching (permissions are NOT re-prompted by the app on start)."
