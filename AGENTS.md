@@ -5,7 +5,7 @@ macOS-only full-screen kid-lock play mode (Swift / AppKit / SpriteKit).
 ### Preferences
 
 - Exit is **Touch ID only** (no session password).
-- Do not re-prompt Accessibility / Input Monitoring on every Start — only from an explicit **«Разрешения…»** UI action.
+- Do not re-prompt Accessibility / Input Monitoring on every Start — only from explicit Setup buttons (**«Универсальный доступ…»** / **«Мониторинг ввода…»**).
 - No Windows/Linux port for now.
 - Pointer trails and letter effects use **ink/blots**, not bubbles or plain circles.
 - Combo / streak HUD should read **vivid and colorful** on each streak.

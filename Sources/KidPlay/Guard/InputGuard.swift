@@ -32,12 +32,52 @@ final class InputGuard: @unchecked Sendable {
         return "Accessibility: \(ax ? "OK" : "нет") · Input Monitoring: \(listen ? "OK" : "нет") · Post Events: \(post ? "OK" : "нет")"
     }
 
-    /// Call ONLY from the explicit «Разрешения…» button — shows system prompts.
-    static func promptForPermissions() {
+    /// Call ONLY from explicit Setup permission buttons — shows system prompts.
+    static func promptAccessibility() {
         let axOptions = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(axOptions)
+    }
+
+    static func promptInputMonitoring() {
         _ = CGRequestListenEventAccess()
+    }
+
+    static func promptPostEvents() {
         _ = CGRequestPostEventAccess()
+    }
+
+    /// Opens the matching System Settings privacy pane (best-effort URL).
+    static func openSettings(for permission: PermissionPane) {
+        let urls: [String]
+        switch permission {
+        case .accessibility:
+            urls = [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+            ]
+        case .inputMonitoring:
+            urls = [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ListenEvent",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+            ]
+        case .postEvents:
+            urls = [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_PostEvent",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_PostEvent",
+            ]
+        }
+        for s in urls {
+            if let url = URL(string: s) {
+                NSWorkspace.shared.open(url)
+                return
+            }
+        }
+    }
+
+    enum PermissionPane {
+        case accessibility
+        case inputMonitoring
+        case postEvents
     }
 
     static func canCreateTap() -> Bool {
@@ -92,7 +132,7 @@ final class InputGuard: @unchecked Sendable {
                 1) Универсальный доступ + Мониторинг ввода → включи именно \(Bundle.main.bundleURL.path)
                 2) Если галочка есть, но статус «нет»: сними → поставь снова
                 3) Cmd+Q (полностью закрой) и открой KidPlay снова с Desktop
-                «Разрешения…» — только чтобы открыть настройки, не каждый запуск.
+                Кнопки «Универсальный доступ…» / «Мониторинг ввода…» — только для выдачи прав.
                 """
             )
         }

@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 /// Kid-facing combo readout: key streak + trackpad path.
 /// Sits below the MacBook notch / camera housing.
@@ -11,7 +12,10 @@ final class ComboHUDView: NSView {
     private var useColors = false
     private var lastKeys = 0
     private var lastPath = 0
-    private var glowLayer: CAGradientLayer?
+
+    /// Soft radial bloom behind the labels (not a hard band/stripe).
+    private var bloomLayer: CAGradientLayer?
+    private var bloomHost: CALayer?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -60,7 +64,7 @@ final class ComboHUDView: NSView {
     override func layout() {
         super.layout()
         refreshTopInset()
-        glowLayer?.frame = bounds
+        layoutBloom()
     }
 
     private func refreshTopInset() {
@@ -82,7 +86,7 @@ final class ComboHUDView: NSView {
                 let color = PlayPalette.streakNSColor(level: keys)
                 keyLabel.textColor = color
                 keyLabel.font = .systemFont(ofSize: min(42, 28 + CGFloat(keys)), weight: .heavy)
-                applyGlow(color: color, intensity: min(1, 0.25 + CGFloat(keys) * 0.04))
+                applySoftGlow(color: color, intensity: min(1, 0.3 + CGFloat(keys) * 0.045))
             } else {
                 keyLabel.textColor = NSColor.white.withAlphaComponent(min(1, 0.45 + CGFloat(keys) * 0.05))
                 keyLabel.font = .systemFont(ofSize: 30, weight: .heavy)
@@ -109,24 +113,71 @@ final class ComboHUDView: NSView {
         }
     }
 
-    private func applyGlow(color: NSColor, intensity: CGFloat) {
+    private func applySoftGlow(color: NSColor, intensity: CGFloat) {
         wantsLayer = true
-        if glowLayer == nil {
-            let g = CAGradientLayer()
-            g.startPoint = CGPoint(x: 0.5, y: 0)
-            g.endPoint = CGPoint(x: 0.5, y: 1)
-            layer?.insertSublayer(g, at: 0)
-            glowLayer = g
+
+        if bloomHost == nil {
+            let host = CALayer()
+            host.masksToBounds = false
+            layer?.insertSublayer(host, at: 0)
+            bloomHost = host
         }
+
+        if bloomLayer == nil {
+            let g = CAGradientLayer()
+            g.type = .radial
+            // Soft falloff: bright core → mid haze → fully clear (no hard stripe edge).
+            g.startPoint = CGPoint(x: 0.5, y: 0.5)
+            g.endPoint = CGPoint(x: 1.0, y: 1.0)
+            bloomHost?.addSublayer(g)
+            bloomLayer = g
+        }
+
+        let core = color.withAlphaComponent(intensity * 0.55).cgColor
+        let mid = color.withAlphaComponent(intensity * 0.22).cgColor
+        let edge = color.withAlphaComponent(intensity * 0.06).cgColor
         let clear = NSColor.clear.cgColor
-        let tint = color.withAlphaComponent(intensity * 0.35).cgColor
-        glowLayer?.colors = [tint, clear]
-        glowLayer?.frame = bounds
+        bloomLayer?.colors = [core, mid, edge, clear]
+        bloomLayer?.locations = [0.0, 0.35, 0.65, 1.0] as [NSNumber]
+
+        // Text bloom via shadow — feathered, not a band.
+        keyLabel.shadow = softTextShadow(color: color, intensity: intensity)
+        pathLabel.shadow = softTextShadow(color: color, intensity: intensity * 0.7)
+
+        layoutBloom()
+    }
+
+    private func softTextShadow(color: NSColor, intensity: CGFloat) -> NSShadow {
+        let shadow = NSShadow()
+        shadow.shadowColor = color.withAlphaComponent(min(0.9, intensity * 0.85))
+        shadow.shadowBlurRadius = 18 + intensity * 14
+        shadow.shadowOffset = .zero
+        return shadow
+    }
+
+    private func layoutBloom() {
+        guard let bloomLayer, let bloomHost else { return }
+        let labelFrame = stack.frame
+        guard labelFrame.width > 1, labelFrame.height > 1 else { return }
+
+        // Elliptical soft pool around the combo text — oversized so the rim dissolves.
+        let padX = max(120, labelFrame.width * 1.6)
+        let padY = max(72, labelFrame.height * 2.2)
+        let bloomRect = labelFrame.insetBy(dx: -padX / 2, dy: -padY / 2)
+
+        bloomHost.frame = bounds
+        bloomLayer.frame = bloomRect
+        bloomLayer.cornerRadius = min(bloomRect.width, bloomRect.height) * 0.5
+        bloomLayer.masksToBounds = false
     }
 
     private func clearGlow() {
-        glowLayer?.removeFromSuperlayer()
-        glowLayer = nil
+        bloomLayer?.removeFromSuperlayer()
+        bloomLayer = nil
+        bloomHost?.removeFromSuperlayer()
+        bloomHost = nil
+        keyLabel.shadow = nil
+        pathLabel.shadow = nil
     }
 
     private func configure(_ label: NSTextField, size: CGFloat, weight: NSFont.Weight) {
@@ -137,5 +188,6 @@ final class ComboHUDView: NSView {
         label.isBezeled = false
         label.isEditable = false
         label.isSelectable = false
+        label.wantsLayer = true
     }
 }

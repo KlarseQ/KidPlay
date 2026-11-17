@@ -10,7 +10,8 @@ final class SetupWindowController: NSWindowController {
     private let pathLabel = NSTextField(wrappingLabelWithString: "")
     private let colorsCheckbox = NSButton(checkboxWithTitle: "Использовать цвета", target: nil, action: nil)
     private let startButton = NSButton(title: "Старт", target: nil, action: nil)
-    private let accessibilityButton = NSButton(title: "Разрешения…", target: nil, action: nil)
+    private let accessibilityButton = NSButton(title: "Универсальный доступ…", target: nil, action: nil)
+    private let inputMonitoringButton = NSButton(title: "Мониторинг ввода…", target: nil, action: nil)
     private let donateButton = NSButton(title: "Поддержать @klarseq", target: nil, action: nil)
 
     var useColors: Bool { colorsCheckbox.state == .on }
@@ -19,7 +20,7 @@ final class SetupWindowController: NSWindowController {
         self.onStart = onStart
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 360),
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 400),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -97,7 +98,7 @@ final class SetupWindowController: NSWindowController {
         statusLabel.font = .systemFont(ofSize: 12)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.alignment = .center
-        statusLabel.maximumNumberOfLines = 4
+        statusLabel.maximumNumberOfLines = 5
 
         pathLabel.font = .systemFont(ofSize: 10)
         pathLabel.textColor = .tertiaryLabelColor
@@ -117,7 +118,17 @@ final class SetupWindowController: NSWindowController {
 
         accessibilityButton.bezelStyle = .rounded
         accessibilityButton.target = self
-        accessibilityButton.action = #selector(openAccessibilitySettings)
+        accessibilityButton.action = #selector(openAccessibilityTapped)
+
+        inputMonitoringButton.bezelStyle = .rounded
+        inputMonitoringButton.target = self
+        inputMonitoringButton.action = #selector(openInputMonitoringTapped)
+
+        let permissionsRow = NSStackView(views: [accessibilityButton, inputMonitoringButton])
+        permissionsRow.orientation = .horizontal
+        permissionsRow.alignment = .centerY
+        permissionsRow.distribution = .fillEqually
+        permissionsRow.spacing = 8
 
         donateButton.bezelStyle = .inline
         donateButton.isBordered = false
@@ -133,7 +144,7 @@ final class SetupWindowController: NSWindowController {
             pathLabel,
             colorsCheckbox,
             startButton,
-            accessibilityButton,
+            permissionsRow,
             donateButton,
         ])
         stack.orientation = .vertical
@@ -147,6 +158,8 @@ final class SetupWindowController: NSWindowController {
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -28),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
             startButton.heightAnchor.constraint(equalToConstant: 28),
+            accessibilityButton.heightAnchor.constraint(equalToConstant: 28),
+            inputMonitoringButton.heightAnchor.constraint(equalToConstant: 28),
         ])
     }
 
@@ -162,7 +175,8 @@ final class SetupWindowController: NSWindowController {
         } else {
             statusLabel.stringValue = """
             Статус: \(summary).
-            Включи KidPlay в «Универсальный доступ» и «Мониторинг ввода», затем Cmd+Q и открой снова.
+            Нажми кнопки ниже → добавь KidPlay через ＋ → включи тумблер.
+            Затем Cmd+Q и открой снова.
             """
             statusLabel.textColor = .systemOrange
         }
@@ -179,18 +193,19 @@ final class SetupWindowController: NSWindowController {
         refreshAccessibilityStatus()
     }
 
-    @objc private func openAccessibilitySettings() {
-        InputGuard.promptForPermissions()
-        let urls = [
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ListenEvent",
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-        ]
-        for s in urls {
-            if let url = URL(string: s) {
-                NSWorkspace.shared.open(url)
-            }
-        }
+    @objc private func openAccessibilityTapped() {
+        InputGuard.promptAccessibility()
+        InputGuard.openSettings(for: .accessibility)
+        scheduleStatusRefresh()
+    }
+
+    @objc private func openInputMonitoringTapped() {
+        InputGuard.promptInputMonitoring()
+        InputGuard.openSettings(for: .inputMonitoring)
+        scheduleStatusRefresh()
+    }
+
+    private func scheduleStatusRefresh() {
         for delay in [0.5, 1.5, 3.0] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.refreshAccessibilityStatus()
